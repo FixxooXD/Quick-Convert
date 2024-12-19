@@ -2,6 +2,10 @@
 import { Nav } from './component/Nav'
 import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
+import { Worker, Viewer } from '@react-pdf-viewer/core';
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
+import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
 
 function App() {
 
@@ -9,16 +13,27 @@ function App() {
   const [message, setMessage] = useState("");
   const [downlaodUrl, setDownloadUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     // Do something with the files  
     console.log(acceptedFiles[0]);
     setFile(acceptedFiles[0]);
+    const acceptedFile = acceptedFiles[0];
+    // Create a blob URL for the file and set it for preview
+    const fileUrl = URL.createObjectURL(acceptedFile);
+    setPreviewUrl(fileUrl);
+
   }, [])
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
 
+  const formData = new FormData();
+
+
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); // Prevent the default form submission
+    event.preventDefault();
     setLoading(true);
     setMessage("");
 
@@ -28,7 +43,6 @@ function App() {
       return;
     }
 
-    const formData = new FormData();
 
     try {
       formData.append("file", file);
@@ -52,6 +66,7 @@ function App() {
       setLoading(false);
     }
   };
+
 
   const handleDownload = async (downloadUrl: string) => {
     try {
@@ -101,16 +116,23 @@ function App() {
   return (
     <>
       <Nav />
-      <div className='flex justify-center items-center h-[90vh]'>
-        <form onSubmit={handleSubmit} encType="multipart/form-data">
+      <div className='flex flex-col justify-center items-center h-[90vh] border-2'>
+        <h1 className='font-bold text-2xl' >Convert PDF to WORD</h1>
+        <form className='border-2 w-[60%] h-[18rem]' onSubmit={handleSubmit} encType="multipart/form-data">
           {/* <input type="file" name="file" required /> */}
-          <div className='border-2 p-4 bg-white text-black' {...getRootProps()}>
-            <input {...getInputProps()} />
+          <div className='border-2 w-[100%] h-[80%] flex justify-center items-center p-4 bg-white text-black hover:cursor-pointer' {...getRootProps()}>
+            <input accept=".pdf,.docx,.txt,.pptx" // Add more formats as needed
+              {...getInputProps()} />
             {
               isDragActive ?
-                <p>Drop the files here ...</p> :
-                <p>Drag 'n' drop some files here, or click to select files</p>
+                <p className='text-2xl'>Drop the files here ...</p> :
+                <p className='text-2xl'>Drag 'n' drop the files here, or click to select file</p>
             }
+            {previewUrl && (
+              <Worker workerUrl="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js">
+                <Viewer fileUrl={typeof previewUrl === 'string' ? previewUrl : new Uint8Array(previewUrl)} />
+              </Worker>
+            )}
           </div>
           {file && (
             <div>
@@ -118,7 +140,7 @@ function App() {
               {/* <p>Size: {(file.size / 1024).toFixed(2)} KB</p> */}
             </div>
           )}
-          <button className='border-2' disabled={loading} type="submit">{loading ? "Uploading..." : "Upload"}</button>
+          <button className='border-2 h-[2rem] w-[10rem]' disabled={loading} type="submit">{loading ? "Uploading..." : "Upload"}</button>
         </form>
         {downlaodUrl && <button className='border-2' onClick={() => handleDownload(downlaodUrl)}>Download</button>}
         {message && <p>{message}</p>}
