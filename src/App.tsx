@@ -1,11 +1,11 @@
 // import './App.css'
 import { Nav } from './component/Nav'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Worker, Viewer } from '@react-pdf-viewer/core';
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
-import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
+
 
 function App() {
 
@@ -14,6 +14,21 @@ function App() {
   const [downlaodUrl, setDownloadUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
+  type FormatType = 'pdf' | 'word' | 'ppt' | 'html' | 'xls' | 'png' | 'jpg';
+  const [formatFrom, setFormatFrom] = useState<FormatType>('word');
+  const [formatTo, setFormatTo] = useState<FormatType>('pdf');
+  const [formatSelectionDuplicateError, setFormatSelectionDuplicateError] = useState<string>('');
+
+  const formatOptions = {
+    pdf: ["WORD", "SVG", "HTML", "XLS, XLSX", "PNG", "JPG"],
+    word: ["PDF", "HTML", "PNG", "JPG"],
+    ppt: ["PDF", "PNG", "JPG"],
+    html: ["PDF", "WORD"],
+    xls: ["PDF", "WORD"],
+    png: ["PDF", "JPG"],
+    jpg: ["PDF", "PNG"],
+  };
+
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     // Do something with the files  
@@ -23,14 +38,11 @@ function App() {
     // Create a blob URL for the file and set it for preview
     const fileUrl = URL.createObjectURL(acceptedFile);
     setPreviewUrl(fileUrl);
-
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
 
   const formData = new FormData();
-
-
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,9 +55,11 @@ function App() {
       return;
     }
 
-
     try {
+      // Appending the file and the selected formats to FormData
       formData.append("file", file);
+      formData.append("formatFrom", formatFrom); // Add format from
+      formData.append("formatTo", formatTo); // Add format to
       const response = await fetch("http://localhost:3000/upload", {
         method: "POST",
         body: formData,
@@ -113,11 +127,61 @@ function App() {
     }
   }
 
+  // Handle change for 'From' select
+  const handleFormatChangeFrom = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newFormatFrom = event.target.value as FormatType;
+    setFormatFrom(newFormatFrom);
+
+    if (formatTo === newFormatFrom) {
+      setFormatTo('word');
+    };
+  }
+
+  useEffect(() => {
+    console.log("FormatFrom", formatFrom);
+    console.log("FormatTo", formatTo);
+    if (formatFrom === formatTo) {
+      setFormatSelectionDuplicateError('Please select different formats for conversion');
+    } else {
+      setFormatSelectionDuplicateError('');
+    }
+  }, [formatTo, formatFrom])
+
+  // Handle change for 'To' select
+  const handleFormatChangeTo = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newFormatTo = event.target.value as FormatType;
+    setFormatTo(newFormatTo);
+    console.log(formatTo)
+    if (formatFrom === newFormatTo) {
+      setFormatSelectionDuplicateError('Please select different formats for conversion');
+    } else {
+      setFormatSelectionDuplicateError('');
+    }
+  };
+
   return (
     <>
       <Nav />
       <div className='flex flex-col justify-center items-center h-[90vh] border-2'>
-        <h1 className='font-bold text-2xl' >Convert PDF to WORD</h1>
+        <div className='font-bold text-2xl' >
+          Convert
+          <select onChange={handleFormatChangeFrom} value={formatFrom} className='border-2 border-black' name="cars" id="cars">
+            <option value="pdf">PDF</option>
+            <option value="word">WORD</option>
+            <option value="ppt">PPT, PPTX</option>
+            <option value="html">HTML</option>
+            <option value="xls">XLS, XLSX</option>
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+          </select>
+          to
+          <select onChange={handleFormatChangeTo} value={formatTo} className='border-2 border-black' name="cars" id="cars">
+            {formatOptions[formatFrom]?.map((format) => (
+              <option key={format} >{format.toUpperCase()}</option>
+            ))}
+          </select>
+          {formatSelectionDuplicateError && <p className='text-red-500'>{formatSelectionDuplicateError}</p>}
+        </div>
         <form className='border-2 w-[60%] h-[18rem]' onSubmit={handleSubmit} encType="multipart/form-data">
           {/* <input type="file" name="file" required /> */}
           <div className='border-2 w-[100%] h-[80%] flex justify-center items-center p-4 bg-white text-black hover:cursor-pointer' {...getRootProps()}>

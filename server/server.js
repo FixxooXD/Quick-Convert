@@ -30,10 +30,6 @@ const storage = multer.diskStorage({
 //using multer to upload the file in the server which is defined by storage
 const upload = multer({ storage: storage });
 
-app.get("/", (req, res) => {
-  res.send("Hello World!");
-});
-
 // setting the destination of the server
 const __dirname = path.dirname(
   "C:Users\rajpaDesktop\file-converterserverserver.js"
@@ -41,8 +37,14 @@ const __dirname = path.dirname(
 
 //Upload route
 app.post("/upload", upload.single("file"), (req, res) => {
-  console.log("line 44", req.body);
-  console.log("line 45", req.file);
+  const { formatFrom, formatTo } = req.body;
+
+  // Check if the formatFrom and formatTo are the same
+  if (formatFrom === formatTo) {
+    return res
+      .status(400)
+      .json({ message: "Please select different formats for conversion" });
+  }
 
   // Check if the file path is relative or absolute
   const uploadedFilePath = path.isAbsolute(req.file.path)
@@ -58,9 +60,61 @@ app.post("/upload", upload.single("file"), (req, res) => {
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
-  // calling the convertWordToPdf function
-  convertWordToPdf(uploadedFilePath, outputDir, res);
+
+  if (formatFrom === "word" && formatTo === "pdf") {
+    // calling the convertWordToPdf function
+    console.log("word to pdf");
+
+    convertWordToPdf(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "pdf" && formatTo === "word") {
+    console.log("pdf to word");
+    // calling the convertWordToPdf function
+    convertPdfToWord(uploadedFilePath, outputDir, res);
+  }
 });
+
+const convertPdfToWord = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --infilter=writer_pdf_import --convert-to docx --outdir ${outputFilePath} ${inputFilePath}`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
 
 // Function to convert Word to PDF
 const convertWordToPdf = (inputFilePath, outputFilePath, res) => {
