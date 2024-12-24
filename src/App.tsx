@@ -40,7 +40,25 @@ function App() {
     setPreviewUrl(fileUrl);
   }, [])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
+  const formatMimeTypes: { [key in FormatType]: string } = {
+    pdf: 'application/pdf',
+    word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword',
+    ppt: 'application/vnd.ms-powerpoint',
+    html: 'text/html',
+    xls: 'application/vnd.ms-excel',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+  };
+
+  const acceptedFormat = formatMimeTypes[formatFrom].split(',');
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: acceptedFormat.reduce((acc, format) => {
+      acc[format] = [];
+      return acc;
+    }, {} as { [key: string]: [] }),
+  })
 
   const formData = new FormData();
 
@@ -133,7 +151,8 @@ function App() {
     setFormatFrom(newFormatFrom);
 
     if (formatTo === newFormatFrom) {
-      setFormatTo('word');
+      const newFormatTo = newFormatFrom === 'pdf' ? 'word' : 'pdf';
+      setFormatTo(newFormatTo);
     };
   }
 
@@ -158,6 +177,8 @@ function App() {
       setFormatSelectionDuplicateError('');
     }
   };
+
+
 
   return (
     <>
@@ -185,7 +206,7 @@ function App() {
         <form className='border-2 w-[60%] h-[18rem]' onSubmit={handleSubmit} encType="multipart/form-data">
           {/* <input type="file" name="file" required /> */}
           <div className='border-2 w-[100%] h-[80%] flex justify-center items-center p-4 bg-white text-black hover:cursor-pointer' {...getRootProps()}>
-            <input accept=".pdf,.docx,.txt,.pptx" // Add more formats as needed
+            <input type='file' accept={acceptedFormat} // Add more formats as needed
               {...getInputProps()} />
             {
               isDragActive ?
