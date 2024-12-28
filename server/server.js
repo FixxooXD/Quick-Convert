@@ -4,6 +4,7 @@ import multer from "multer";
 import { exec } from "child_process";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 
 const app = express();
 
@@ -30,10 +31,8 @@ const storage = multer.diskStorage({
 //using multer to upload the file in the server which is defined by storage
 const upload = multer({ storage: storage });
 
-// setting the destination of the server
-const __dirname = path.dirname(
-  "C:Users\rajpaDesktop\file-converterserverserver.js"
-);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 //Upload route
 app.post("/upload", upload.single("file"), (req, res) => {
@@ -48,13 +47,16 @@ app.post("/upload", upload.single("file"), (req, res) => {
 
   // Check if the file path is relative or absolute
   const uploadedFilePath = path.isAbsolute(req.file.path)
-    ? req.file.path // If already absolute, use as is
+    ? req.file.path // If already absolute, use as it is
     : path.resolve(__dirname, req.file.path); // If relative, resolve it
 
+  console.log("line 54", uploadedFilePath);
+
   // Set the path for the converted file (in 'converted' folder)
-  const outputDir = path.join(
-    "C:/Users/rajpa/Desktop/file-converter/server/converted"
-  );
+  const baseOutputDir = process.env.BASE_OUTPUT_DIR || "converted";
+  const outputDir = path.resolve(__dirname, baseOutputDir);
+
+  console.log(outputDir);
 
   // Ensure 'converted' folder exists
   if (!fs.existsSync(outputDir)) {
@@ -72,6 +74,44 @@ app.post("/upload", upload.single("file"), (req, res) => {
     console.log("pdf to word");
     // calling the convertWordToPdf function
     convertPdfToWord(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "pdf" && formatTo === "svg") {
+    console.log("pdf to svg");
+    // calling the convertWordToPdf function
+    convertPdfToSvg(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "pdf" && formatTo === "html") {
+    console.log("pdf to html");
+    // calling the convertWordToPdf function
+    convertPdfToHtml(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "svg" && formatTo === "png") {
+    console.log("svg to png");
+    // calling the convertWordToPdf function
+    convertSvgToPng(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "pdf" && formatTo === "jpeg") {
+    console.log("pdf to jpeg");
+    // calling the convertWordToPdf function
+    convertPdfToJpeg(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "pdf" && formatTo === "png") {
+    console.log("pdf to png");
+    // calling the convertWordToPdf function
+    convertPdfToPng(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "pdf" && formatTo === "jpeg") {
+    convertPdfToExcel(uploadedFilePath, outputDir, res);
+  }
+
+  if (formatFrom === "pdf" && formatTo === "png" && formatTo === "jpeg") {
+    convertPdfToPngOrJpeg(uploadedFilePath, outputDir, res);
   }
 });
 
@@ -116,12 +156,300 @@ const convertPdfToWord = (inputFilePath, outputFilePath, res) => {
   });
 };
 
+const convertPdfToPngOrJpeg = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --convert-to pdf --outdir ${outputFilePath} ${inputFilePath}`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
+
+const convertPdfToExcel = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --convert-to xlsx --outdir ${outputFilePath} ${inputFilePath}`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
+
+const convertSvgToPng = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --convert-to png --outdir ${outputFilePath} ${inputFilePath}`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
+
+const convertPdfToHtml = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --convert-to html --outdir ${outputFilePath} ${inputFilePath}`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
+
+const convertPdfToSvg = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --convert-to svg --outdir ${outputFilePath} ${inputFilePath}
+`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
+
+const convertPdfToJpeg = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --convert-to jpg --outdir ${outputFilePath} ${inputFilePath}`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
+
 // Function to convert Word to PDF
 const convertWordToPdf = (inputFilePath, outputFilePath, res) => {
   console.log(outputFilePath);
 
   // Command to convert Word to PDF
   const command = `soffice --headless --convert-to pdf --outdir ${outputFilePath} ${inputFilePath}`;
+  //  running the command to convertWordToPdf
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Error: ${error.message}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      res.status(500).send("Conversion failed");
+      return;
+    }
+    console.log(`Conversion successful: ${stdout}`);
+
+    //Post Conversion removing the file from the uploads folder
+    fs.unlinkSync(inputFilePath);
+
+    // Extract the converted file name from the stdout
+    const match = stdout.match(/-> (.*?) using filter/);
+    let convertedFileName = "";
+    if (match && match[1]) {
+      const convertedFilePath = match[1];
+      convertedFileName = path.basename(convertedFilePath); // Get only the file name
+      console.log(`Converted file name: ${convertedFileName}`);
+    }
+
+    // Respond with success and download URL
+    if (!res.headersSent) {
+      return res.json({
+        message: "Conversion successful",
+        downloadUrl: `/download/${convertedFileName}`,
+      });
+    }
+  });
+};
+
+const convertPdfToPng = (inputFilePath, outputFilePath, res) => {
+  console.log(outputFilePath);
+
+  // Command to convert Word to PDF
+  const command = `soffice --headless --convert-to png --outdir ${outputFilePath} ${inputFilePath}`;
   //  running the command to convertWordToPdf
   exec(command, (error, stdout, stderr) => {
     if (error) {
