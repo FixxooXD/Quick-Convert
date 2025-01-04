@@ -20,5 +20,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.ts",
+    "src/**/*.ts",        // Include all TypeScript files in the src folder (if applicable)
+    "server/**/*.ts"      // Include all TypeScript files in the server folder (if applicable)
+  ]
 }

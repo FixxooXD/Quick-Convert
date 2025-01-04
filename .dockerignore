@@ -1,0 +1,29 @@
+# Ignore node_modules from both frontend and backend
+node_modules
+server/node_modules
+
+# Build directories
+dist
+build
+server/public
+
+# File processing directories
+server/uploads/*
+server/converted/*
+!server/uploads/.gitkeep
+!server/converted/.gitkeep
+
+
+# Version control
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
