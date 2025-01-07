@@ -1,20 +1,26 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { exec } from "child_process";
 import path from "path";
-import fs from "fs";
+import fs from "fs/promises";
+import { existsSync } from "fs";
 import { fileURLToPath } from "url";
+import { promisify } from "util";
+import { exec as execCallback } from "child_process";
 
+const exec = promisify(execCallback);
 const app = express();
-
 const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || "development" || undefined;
 
+console.log(NODE_ENV);
+
+// CORS Configuration
 const corsOptions = {
   origin:
-    process.env.NODE_ENV === "production"
-      ? "https://quick-converter-ver-1.onrender.com"
-      : "http://localhost:5173",
+    NODE_ENV === "production"
+      ? "https://quick-converter-ver-1.onrender.com/"
+      : "http://localhost:8080",
   credentials: true,
   optionsSuccessStatus: 200,
 };
@@ -22,6 +28,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.urlencoded({ extended: false }));
 
+// Directory Setup
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -35,102 +42,73 @@ const convertedDir =
     ? "/tmp/converted"
     : path.join(__dirname, "converted");
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(convertedDir)) {
-  fs.mkdirSync(convertedDir, { recursive: true });
+// Initialize directories
+async function initializeDirectories() {
+  try {
+    await fs.mkdir(uploadsDir, { recursive: true });
+    await fs.mkdir(convertedDir, { recursive: true });
+  } catch (error) {
+    console.error("Error creating directories:", error);
+    process.exit(1);
+  }
 }
 
-// const isProduction = process.env.NODE_ENV === "production";
+await initializeDirectories();
 
-// if (isProduction) {
+// Serve static files
 app.use(express.static(path.join(__dirname, "dist")));
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
-// }
-//Uploading the file which is uploaded by the user
+// File Upload Configuration
 const storage = multer.diskStorage({
-  // setting the destination of the uploaded file
-  destination: function (req, file, cd) {
-    cd(null, uploadsDir);
-  },
-  //Manupulating the filename like remoaving spaces and adding date stamp
-  filename: function (req, file, cd) {
-    // Remove spaces globally from the filename
-    const sanitizedFilename = file.originalname.split(" ").join("");
-    // Prepend timestamp to ensure unique filenames
-    cd(null, `${Date.now()}-${sanitizedFilename}`);
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const sanitizedFilename = file.originalname.replace(/\s+/g, "");
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
   },
 });
 
-//using multer to upload the file in the server which is defined by storage
-const upload = multer({ storage: storage });
+const fileSizeLimit = 10 * 1024 * 1024; // 10MB
+const upload = multer({
+  storage,
+  limits: { fileSize: fileSizeLimit },
+});
 
-//Upload route
-app.post("/upload", upload.single("file"), (req, res) => {
-  const { formatFrom, formatTo } = req.body;
+// File tracking
+const fileTracking = new Map();
 
-  // Check if the formatFrom and formatTo are the same
-  if (formatFrom === formatTo) {
-    return res
-      .status(400)
-      .json({ message: "Please select different formats for conversion" });
-  }
+// File cleanup function
+async function cleanOldFiles() {
+  const now = Date.now();
+  const threshold = 2 * 60 * 1000; // 2 minutes
 
-  // Check if the file path is relative or absolute
-  const uploadedFilePath = path.isAbsolute(req.file.path)
-    ? req.file.path // If already absolute, use as it is
-    : path.resolve(__dirname, req.file.path); // If relative, resolve it
-
-  // Set the path for the converted file (in 'converted' folder)
-  const baseOutputDir = process.env.BASE_OUTPUT_DIR || "converted";
-  const outputDir = path.resolve(__dirname, baseOutputDir);
-
-  console.log("fileuploaded", uploadedFilePath);
-
-  convertFile(formatFrom, formatTo, uploadedFilePath, outputDir, res);
-
-  // Ensure 'converted' folder exists
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-
-    // Validate formats
-    const supportedFormats = [
-      "word",
-      "pdf",
-      "svg",
-      "html",
-      "png",
-      "jpeg",
-      "excel",
-    ];
-    if (
-      !supportedFormats.includes(formatFrom) ||
-      !supportedFormats.includes(formatTo)
-    ) {
-      return res.status(400).json({ error: "Unsupported format" });
+  for (const [filePath, details] of fileTracking.entries()) {
+    if (now - details.timestamp > threshold) {
+      try {
+        await fs.unlink(filePath);
+        console.log(`Deleted file: ${filePath}`);
+        fileTracking.delete(filePath);
+      } catch (error) {
+        console.error(`Error deleting file ${filePath}:`, error);
+      }
     }
   }
-});
+}
 
-const getConversionCommand = (
-  formatFrom,
-  formatTo,
-  inputFilePath,
-  outputFilePath
-) => {
-  const baseCommand = `soffice --headless`;
-  console.log("inside getconversioncommand", formatFrom, formatTo);
+// Supported formats
+const supportedFormats = new Set([
+  "word",
+  "pdf",
+  "svg",
+  "html",
+  "png",
+  "jpeg",
+  "excel",
+]);
 
-  // Special case for PDF to Word conversion
-  if (formatFrom === "pdf" && formatTo === "word") {
-    return `${baseCommand} --infilter=writer_pdf_import --convert-to docx --outdir ${outputFilePath} ${inputFilePath}`;
-  }
+// Conversion command generator
+function getConversionCommand(formatFrom, formatTo, inputPath, outputDir) {
+  const baseCommand = "soffice --headless";
 
-  // Map format extensions
   const formatExtensions = {
     word: "docx",
     pdf: "pdf",
@@ -141,95 +119,126 @@ const getConversionCommand = (
     excel: "xlsx",
   };
 
-  const targetFormat = formatExtensions[formatTo] || formatTo;
-  return `${baseCommand} --convert-to ${targetFormat} --outdir ${outputFilePath} ${inputFilePath}`;
-};
-
-const convertFile = (
-  formatFrom,
-  formatTo,
-  inputFilePath,
-  outputFilePath,
-  res
-) => {
-  console.log(`Converting from ${formatFrom} to ${formatTo}`);
-  console.log(`Output path: ${outputFilePath}`);
-
-  if (!fs.existsSync(inputFilePath)) {
-    console.error(`Input file does not exist: ${inputFilePath}`);
-    return res.status(400).json({ error: "Input file not found" });
+  if (formatFrom === "pdf" && formatTo === "word") {
+    return `${baseCommand} --infilter=writer_pdf_import --convert-to docx --outdir "${outputDir}" "${inputPath}"`;
   }
+
+  const targetFormat = formatExtensions[formatTo] || formatTo;
+  return `${baseCommand} --convert-to ${targetFormat} --outdir "${outputDir}" "${inputPath}"`;
+}
+
+// File conversion function
+async function convertFile(formatFrom, formatTo, inputPath, outputDir) {
+  if (!existsSync(inputPath)) {
+    throw new Error("Input file not found");
+  }
+
   const command = getConversionCommand(
     formatFrom,
     formatTo,
-    inputFilePath,
-    outputFilePath
+    inputPath,
+    outputDir
   );
 
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Error: ${error.message}`);
-      res.status(500).send("Conversion failed");
-      return;
-    }
+  try {
+    const { stdout, stderr } = await exec(command);
     if (stderr) {
-      console.error(`stderr: ${stderr}`);
-      res.status(500).send("Conversion failed");
-      return;
+      console.warn("Conversion warning:", stderr);
     }
-    console.log(`Conversion successful: ${stdout}`);
 
-    // Post Conversion removing the file from the uploads folder
-    fs.unlinkSync(inputFilePath);
+    // Clean up input file
+    await fs.unlink(inputPath);
 
-    // Extract the converted file name from the stdout
+    // Extract converted filename
     const match = stdout.match(/-> (.*?) using filter/);
-    let convertedFileName = "";
-    if (match && match[1]) {
-      const convertedFilePath = match[1];
-      convertedFileName = path.basename(convertedFilePath); // Get only the file name
-      console.log(`Converted file name: ${convertedFileName}`);
+    if (!match || !match[1]) {
+      throw new Error("Could not determine converted file name");
     }
 
-    // Respond with success and download URL
-    if (!res.headersSent) {
-      return res.json({
-        message: "Conversion successful",
-        downloadUrl: `/download/${convertedFileName}`,
+    const convertedPath = match[1];
+    const convertedFileName = path.basename(convertedPath);
+
+    // Track the converted file
+    fileTracking.set(path.join(outputDir, convertedFileName), {
+      timestamp: Date.now(),
+      type: "converted",
+    });
+
+    return convertedFileName;
+  } catch (error) {
+    throw new Error(`Conversion failed: ${error.message}`);
+  }
+}
+
+// Routes
+app.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    const { formatFrom, formatTo } = req.body;
+
+    if (formatFrom === formatTo) {
+      return res.status(400).json({
+        error: "Please select different formats for conversion",
       });
     }
-  });
-};
 
-// Serve converted files for download
-app.get("/download/:filename", (req, res) => {
-  console.log("line 54", req.params.filename);
-  const filePath = path.resolve(__dirname, "converted", req.params.filename);
-  if (!fs.existsSync(filePath)) {
-    res.status(404).send("File not found");
-    return;
-  }
-  try {
-    res.download(filePath, (err) => {
-      if (err) {
-        console.error("Error during download:", err);
-      } else {
-        // Remove the file after it has been successfully downloaded
-        fs.unlink(filePath, (unlinkErr) => {
-          if (unlinkErr) {
-            console.error("Error removing file:", unlinkErr);
-          } else {
-            console.log(`File ${filePath} has been deleted successfully.`);
-          }
-        });
-      }
+    if (!supportedFormats.has(formatFrom) || !supportedFormats.has(formatTo)) {
+      return res.status(400).json({ error: "Unsupported format" });
+    }
+
+    const convertedFileName = await convertFile(
+      formatFrom,
+      formatTo,
+      req.file.path,
+      convertedDir
+    );
+
+    res.json({
+      message: "Conversion successful",
+      downloadUrl: `/download/${convertedFileName}`,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).send("An error occurred while downloading the file.");
+    console.error("Conversion error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
+app.get("/download/:filename", async (req, res) => {
+  const filePath = path.join(convertedDir, req.params.filename);
+
+  try {
+    await fs.access(filePath);
+    res.download(filePath, req.params.filename, async (err) => {
+      if (err) {
+        console.error("Download error:", err);
+        if (!res.headersSent) {
+          res.status(500).send("Download failed");
+        }
+      } else {
+        try {
+          await fs.unlink(filePath);
+          fileTracking.delete(filePath);
+        } catch (unlinkError) {
+          console.error("Error removing file after download:", unlinkError);
+        }
+      }
+    });
+  } catch (error) {
+    res.status(404).send("File not found");
+  }
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "healthy" });
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+
+// Start cleanup interval
+setInterval(cleanOldFiles, 60 * 1000);
+
+// Start server
 app.listen(PORT, () => {
-  console.log("server is listening", PORT);
+  console.log(`Server running on port ${PORT}`);
 });

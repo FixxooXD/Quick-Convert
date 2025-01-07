@@ -29,7 +29,7 @@ RUN npm install
 COPY server/ ./server/
 
 # Copy the frontend build output into the server's dist folder
-COPY --from=build /app/dist ./server/dist
+COPY --from=build /app/server/dist ./server/dist
 
 # Expose port for the backend to run
 EXPOSE 3000

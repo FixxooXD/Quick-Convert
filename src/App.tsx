@@ -4,8 +4,6 @@ import { useDropzone } from 'react-dropzone'
 import { Worker, Viewer } from '@react-pdf-viewer/core';
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
-// import { ArrowRightIcon, UploadIcon, DownloadIcon } from '@heroicons/react/solid';
-// import { ArrowUpOnSquareIcon} from '@heroicons/react/24/solid'
 
 function App() {
   const [loading, setLoading] = useState(false);
@@ -14,6 +12,7 @@ function App() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   type FormatType = 'pdf' | 'word' | 'ppt' | 'html' | 'xls' | 'png' | 'jpg';
+  const [fileSize, setFileSize] = useState<number>(0);
   const [formatFrom, setFormatFrom] = useState<FormatType>('word');
   const [formatTo, setFormatTo] = useState<FormatType>('pdf');
   const [formatSelectionDuplicateError, setFormatSelectionDuplicateError] = useState<string>('');
@@ -36,6 +35,15 @@ function App() {
     setPreviewUrl(fileUrl);
   }, [])
 
+  useEffect(() => {
+    const size = (file ? (file.size / 1024 / 1024).toFixed(2) : 0);
+    setFileSize(size as number);
+    if (Number(size) > 50) {
+      setMessage("File size should be less than 50MB");
+    }
+  }, [file])
+
+
   const formatMimeTypes: { [key in FormatType]: string } = {
     pdf: 'application/pdf',
     word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword',
@@ -46,9 +54,16 @@ function App() {
     jpg: 'image/jpeg',
   };
 
+
   const API_URL = process.env.NODE_ENV === 'production'
     ? 'https://quick-converter-ver-1.onrender.com'
     : 'http://localhost:3000';
+
+  // const API_URL = 'http://localhost:3000';
+
+  console.log(API_URL);
+  console.log(process.env.NODE_ENV);
+
 
 
   const acceptedFormat = formatMimeTypes[formatFrom].split(',');
@@ -105,8 +120,10 @@ function App() {
       const response = await fetch(`${API_URL}${downloadUrl}`, {
         method: "get",
       });
+      console.log(response);
 
       if (response.ok) {
+        console.log(response);
         const blob = await response.blob();
         console.log(blob);
         const blobUrl = URL.createObjectURL(blob);
@@ -225,7 +242,7 @@ function App() {
                 <div className="mt-4 text-sm text-gray-600">
                   <p>Selected File: <span className="font-semibold">{file.name}</span></p>
                   <p>File Type: <span className="font-semibold">{file.type || 'Unknown'}</span></p>
-                  <p>File Size: <span className="font-semibold">{(file.size / 1024 / 1024).toFixed(2)} MB</span></p>
+                  <p>File Size: <span className="font-semibold">{fileSize} MB</span></p>
                 </div>
               )}
               <div className="mt-6 flex justify-center">
@@ -244,7 +261,6 @@ function App() {
                     </>
                   ) : (
                     <>
-                      {/* <UploadIcon className="w-5 h-5 mr-2" /> */}
                       Convert File
                     </>
                   )}
